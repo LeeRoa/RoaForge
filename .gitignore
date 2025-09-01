@@ -1,37 +1,71 @@
-HELP.md
-.gradle
-build/
-!gradle/wrapper/gradle-wrapper.jar
-!**/src/main/**/build/
-!**/src/test/**/build/
+# === Spring Boot Backend ===
+backend/HELP.md
+backend/.gradle
+backend/build/
+!backend/gradle/wrapper/gradle-wrapper.jar
+!backend/**/src/main/**/build/
+!backend/**/src/test/**/build/
 
 ### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-bin/
-!**/src/main/**/bin/
-!**/src/test/**/bin/
+backend/.apt_generated
+backend/.classpath
+backend/.factorypath
+backend/.project
+backend/.settings
+backend/.springBeans
+backend/.sts4-cache
+backend/bin/
+!backend/**/src/main/**/bin/
+!backend/**/src/test/**/bin/
 
 ### IntelliJ IDEA ###
 .idea
 *.iws
 *.iml
 *.ipr
-out/
-!**/src/main/**/out/
-!**/src/test/**/out/
+backend/out/
+!backend/**/src/main/**/out/
+!backend/**/src/test/**/out/
 
 ### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
+backend/nbproject/private/
+backend/nbbuild/
+backend/dist/
+backend/nbdist/
+backend/.nb-gradle/
 
 ### VS Code ###
 .vscode/
+
+# === RoaForge 데이터 ===
+backend/data/             # H2 데이터베이스
+backend/storage/          # 업로드된 PDF들
+backend/temp/             # 임시 파일들
+backend/logs/             # 로그 파일들
+backend/*.log
+
+### Environment & Security ###
+backend/.env
+backend/.env.local
+backend/.env.production
+backend/*.p12             # 인증서 파일들
+backend/*.pfx
+
+# === React Frontend ===
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+frontend/.env.local
+frontend/.env.production.local
+frontend/.env.development.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# === 공통 ===
+### OS ###
+.DS_Store
+Thumbs.db
+
+### Logs ###
+*.log

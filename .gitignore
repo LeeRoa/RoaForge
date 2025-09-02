@@ -1,66 +1,66 @@
 # === Spring Boot Backend ===
-backend/HELP.md
-backend/.gradle
-backend/build/
-!backend/gradle/wrapper/gradle-wrapper.jar
-!backend/**/src/main/**/build/
-!backend/**/src/test/**/build/
+roaforge-api/HELP.md
+roaforge-api/.gradle
+roaforge-api/build/
+!roaforge-api/gradle/wrapper/gradle-wrapper.jar
+!roaforge-api/**/src/main/**/build/
+!roaforge-api/**/src/test/**/build/
 
 ### STS ###
-backend/.apt_generated
-backend/.classpath
-backend/.factorypath
-backend/.project
-backend/.settings
-backend/.springBeans
-backend/.sts4-cache
-backend/bin/
-!backend/**/src/main/**/bin/
-!backend/**/src/test/**/bin/
+roaforge-api/.apt_generated
+roaforge-api/.classpath
+roaforge-api/.factorypath
+roaforge-api/.project
+roaforge-api/.settings
+roaforge-api/.springBeans
+roaforge-api/.sts4-cache
+roaforge-api/bin/
+!roaforge-api/**/src/main/**/bin/
+!roaforge-api/**/src/test/**/bin/
 
 ### IntelliJ IDEA ###
 .idea
 *.iws
 *.iml
 *.ipr
-backend/out/
-!backend/**/src/main/**/out/
-!backend/**/src/test/**/out/
+roaforge-api/out/
+!roaforge-api/**/src/main/**/out/
+!roaforge-api/**/src/test/**/out/
 
 ### NetBeans ###
-backend/nbproject/private/
-backend/nbbuild/
-backend/dist/
-backend/nbdist/
-backend/.nb-gradle/
+roaforge-api/nbproject/private/
+roaforge-api/nbbuild/
+roaforge-api/dist/
+roaforge-api/nbdist/
+roaforge-api/.nb-gradle/
 
 ### VS Code ###
 .vscode/
 
 # === RoaForge 데이터 ===
-backend/data/             # H2 데이터베이스
-backend/storage/          # 업로드된 PDF들
-backend/temp/             # 임시 파일들
-backend/logs/             # 로그 파일들
-backend/*.log
+roaforge-api/data/             # H2 데이터베이스
+roaforge-api/storage/          # 업로드된 PDF들
+roaforge-api/temp/             # 임시 파일들
+roaforge-api/logs/             # 로그 파일들
+roaforge-api/*.log
 
 ### Environment & Security ###
-backend/.env
-backend/.env.local
-backend/.env.production
-backend/*.p12             # 인증서 파일들
-backend/*.pfx
+roaforge-api/.env
+roaforge-api/.env.local
+roaforge-api/.env.production
+roaforge-api/*.p12             # 인증서 파일들
+roaforge-api/*.pfx
 
 # === React Frontend ===
-frontend/node_modules/
-frontend/build/
-frontend/dist/
-frontend/.env.local
-frontend/.env.production.local
-frontend/.env.development.local
-frontend/npm-debug.log*
-frontend/yarn-debug.log*
-frontend/yarn-error.log*
+roaforge-web/node_modules/
+roaforge-web/build/
+roaforge-web/dist/
+roaforge-web/.env.local
+roaforge-web/.env.production.local
+roaforge-web/.env.development.local
+roaforge-web/npm-debug.log*
+roaforge-web/yarn-debug.log*
+roaforge-web/yarn-error.log*
 
 # === 공통 ===
 ### OS ###

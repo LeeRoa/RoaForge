@@ -3,6 +3,7 @@ package com.roa.forge.service;
 import com.roa.forge.entity.UserAccount;
 import com.roa.forge.repository.UserAccountRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +15,7 @@ import java.util.List;
 public class UserAccountService {
 
     private final UserAccountRepository userAccountRepository;
+    private final PasswordEncoder passwordEncoder;
 
     public List<UserAccount> getAllUsers() {
         return userAccountRepository.findAll();
@@ -21,12 +23,18 @@ public class UserAccountService {
 
     public UserAccount getUser(Long id) {
         return userAccountRepository.findById(id).orElseThrow(() ->
-                new IllegalArgumentException("User not found: " + id));
+                new IllegalArgumentException("사용자를 찾을 수 없습니다. : " + id));
     }
 
     @Transactional
     public UserAccount createUser(UserAccount user) {
-        // TODO: 비밀번호는 반드시 암호화 후 저장 (MVP 단계에서는 raw도 가능)
+        String encodedPw = passwordEncoder.encode(user.getPassword());
+        user = UserAccount.builder()
+                .username(user.getUsername())
+                .password(encodedPw)
+                .email(user.getEmail())
+                .active(user.getActive())
+                .build();
         return userAccountRepository.save(user);
     }
 

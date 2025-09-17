@@ -28,7 +28,7 @@ public class AuthService {
                 .orElseGet(() -> roleRepo.save(Role.builder().name("ROLE_USER").build()));
     }
 
-    /** 로컬 회원가입 */
+    /** 로컬 회원가입: sub=userId 로 발급 */
     @Transactional
     public TokenResponse registerLocal(RegisterRequest req) {
         if (userRepo.existsByEmail(req.getEmail())) throw new IllegalArgumentException("이미 가입된 이메일입니다.");
@@ -39,38 +39,35 @@ public class AuthService {
                 .email(req.getEmail())
                 .password(passwordEncoder.encode(req.getPassword())) // BCrypt
                 .active(true)
-                .provider("LOCAL")
                 .build();
-        user.addRole(ensureUserRole());
-        userRepo.save(user);
 
-        String subject = user.getEmail(); // JWT subject는 email로 통일
-        return new TokenResponse(jwt.createAccessToken(subject), jwt.createRefreshToken(subject));
+        user.addRole(ensureUserRole());
+        user.linkProvider("LOCAL", null); // 빌더가 provider를 받지 않으면 도메인 메서드로 세팅
+        userRepo.save(user);              // save 후에 id 채워짐
+
+        return issueTokensFor(user);
     }
 
-    /** 구글 최초 로그인: 없으면 생성/연결 */
+    /** 구글 최초 로그인: 없으면 생성/연결 후 엔티티 반환 (발급은 핸들러에서 issueTokensFor 호출) */
     @Transactional
     public UserAccount upsertGoogleUser(String sub, String email, String nameOrNull) {
-        // provider+providerId 일치 시 바로 반환
         return userRepo.findByProviderAndProviderId("GOOGLE", sub)
                 .orElseGet(() -> userRepo.findByEmail(email)
-                        .map(existing -> { // 기존 로컬 계정과 연동
+                        .map(existing -> {                // 기존 로컬 계정과 연동
                             existing.linkProvider("GOOGLE", sub);
                             return existing;
                         })
-                        .orElseGet(() -> { // 신규 유저 생성
+                        .orElseGet(() -> {                // 신규 유저 생성
                             String username = deriveUniqueUsername(email, nameOrNull);
-                            // 소셜용 패스워드(검증용 아님). @NotBlank/@Size 때문에 랜덤 비번 저장
-                            String fakePwd = passwordEncoder.encode(UUID.randomUUID().toString());
+                            String fakePwd = passwordEncoder.encode(UUID.randomUUID().toString()); // 제약 충족용
                             UserAccount u = UserAccount.builder()
                                     .username(username)
                                     .email(email)
                                     .password(fakePwd)
                                     .active(true)
-                                    .provider("GOOGLE")
-                                    .providerId(sub)
                                     .build();
                             u.addRole(ensureUserRole());
+                            u.linkProvider("GOOGLE", sub);
                             return userRepo.save(u);
                         }));
     }
@@ -85,7 +82,17 @@ public class AuthService {
         return candidate;
     }
 
+    /** userId 기반 토큰 발급 */
+    public TokenResponse issueTokensFor(UserAccount user) {
+        String access  = jwt.createAccessToken(user.getId(), user.getEmail(), user.getUsername(), user.getProvider());
+        String refresh = jwt.createRefreshToken(user.getId());
+        return new TokenResponse(access, refresh);
+    }
+
+    /** (구방식) 이메일로 발급 */
+    @Deprecated
     public TokenResponse issueTokens(String subjectEmail) {
+        // 남겨두려면 JwtTokenProvider에 레거시 오버로드(createAccessToken(String))가 있어야 함
         return new TokenResponse(jwt.createAccessToken(subjectEmail), jwt.createRefreshToken(subjectEmail));
     }
 }

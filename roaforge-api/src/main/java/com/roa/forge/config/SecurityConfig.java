@@ -1,6 +1,7 @@
 package com.roa.forge.config;
 
 import com.roa.forge.filter.JwtAuthenticationFilter;
+import com.roa.forge.handler.GoogleSuccessHandler;
 import com.roa.forge.service.CustomUserDetailsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -24,7 +25,7 @@ public class SecurityConfig {
     private final CustomUserDetailsService customUserDetailsService;
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, GoogleSuccessHandler googleSuccessHandler) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -38,7 +39,8 @@ public class SecurityConfig {
                                 "/oauth2/authorization/**"
                         ).permitAll()
                         .anyRequest().authenticated()
-                );
+                )
+                .oauth2Login(o -> o.successHandler(googleSuccessHandler));
 
 
         // JWT 필터 추가

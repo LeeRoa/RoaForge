@@ -1,6 +1,8 @@
 package com.roa.forge.handler;
 
-import com.roa.forge.provider.JwtTokenProvider;
+import com.roa.forge.dto.TokenResponse;
+import com.roa.forge.entity.UserAccount;
+import com.roa.forge.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +20,7 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class GoogleSuccessHandler implements AuthenticationSuccessHandler {
 
-    private final JwtTokenProvider jwtTokenProvider;
+    private final AuthService authService;
 
     @Value("${app.oauth2.redirect-uri}")
     private String redirectUri;
@@ -26,25 +28,39 @@ public class GoogleSuccessHandler implements AuthenticationSuccessHandler {
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
                                         Authentication authentication) throws IOException {
-        Object principal = authentication.getPrincipal();
-        String email = null;
-        String sub = null;
 
-        if (principal instanceof OidcUser oidc) {           // 구글 OIDC면 여기로 옴
+        Object principal = authentication.getPrincipal();
+
+        String email = null;
+        String sub   = null;
+        String name  = null;
+
+        if (principal instanceof OidcUser oidc) {
             email = oidc.getEmail();
-            sub = oidc.getSubject();                        // 고유 ID
-        } else if (principal instanceof OAuth2User ou) {    // 혹시 OIDC scope 빠진 경우
+            sub   = oidc.getSubject();     // 구글 고유 ID
+            name  = oidc.getFullName();
+        } else if (principal instanceof OAuth2User ou) {
             email = (String) ou.getAttributes().get("email");
-            sub = (String) ou.getAttributes().get("sub");
+            sub   = (String) ou.getAttributes().get("sub");
+            name  = (String) ou.getAttributes().get("name");
         }
 
-        String subject = (email != null) ? email : sub;
-        String accessToken = jwtTokenProvider.createAccessToken(subject);
-        String refreshToken = jwtTokenProvider.createRefreshToken(subject);
+        if (sub == null) {
+            // 최소한의 방어 (scope가 잘못됐거나 응답 불완전)
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Google account id (sub) is missing");
+            return;
+        }
 
+        // 1) (provider=GOOGLE, providerId=sub) 기준 upsert → 우리 DB 유저 확보
+        UserAccount user = authService.upsertGoogleUser(sub, email, name);
+
+        // 2) userId 기반 토큰 발급 (sub = user.getId())
+        TokenResponse tokens = authService.issueTokensFor(user);
+
+        // 3) 프론트 콜백으로 리다이렉트
         String target = UriComponentsBuilder.fromUriString(redirectUri)
-                .queryParam("access_token", accessToken)
-                .queryParam("refresh_token", refreshToken)
+                .queryParam("access_token", tokens.getAccessToken())
+                .queryParam("refresh_token", tokens.getRefreshToken())
                 .build(true)
                 .toUriString();
 

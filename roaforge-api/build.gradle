@@ -53,6 +53,9 @@ dependencies {
 
     // TSA 호출 시 BC TLS 스택이 꼭 필요할 때만
     // implementation("org.bouncycastle:bctls-jdk18on:1.81")
+    
+    // OAuth2 Client
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
 
     // Swagger-ui 라이브러리
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.7.0'

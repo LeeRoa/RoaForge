@@ -11,15 +11,25 @@ import java.util.Date;
 public class JwtTokenProvider {
 
     private static final String SECRET_KEY = "your-very-secure-secret-key-should-be-long";
-    private static final long EXPIRATION_MS = 1000 * 60 * 60; // 1시간
+    private static final long ACCESS_EXPIRATION_MS = 1000 * 60 * 60;        // 1시간
+    private static final long REFRESH_EXPIRATION_MS = 1000L * 60 * 60 * 24 * 14; // 2주
 
     private final Key key = Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
 
-    public String generateToken(String username) {
+    public String createAccessToken(String username) {
         return Jwts.builder()
                 .setSubject(username)
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_MS))
+                .setExpiration(new Date(System.currentTimeMillis() + ACCESS_EXPIRATION_MS))
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public String createRefreshToken(String username) {
+        return Jwts.builder()
+                .setSubject(username)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + REFRESH_EXPIRATION_MS))
                 .signWith(key, SignatureAlgorithm.HS256)
                 .compact();
     }

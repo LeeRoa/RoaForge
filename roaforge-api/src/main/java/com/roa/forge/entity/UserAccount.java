@@ -98,4 +98,7 @@ public class UserAccount extends BaseTimeEntity {
     /** 활성/비활성 전환 */
     public void activate() { this.active = true; }
     public void deactivate() { this.active = false; }
+
+    public void changeUsername(String username) { this.username = username; }
+    public void changeEmail(String email) { this.email = email; }
 }

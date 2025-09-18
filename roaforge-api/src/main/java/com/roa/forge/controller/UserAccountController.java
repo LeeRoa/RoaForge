@@ -1,10 +1,15 @@
 package com.roa.forge.controller;
 
+import com.roa.forge.dto.MeResponse;
+import com.roa.forge.dto.ProfileUpdateRequest;
+import com.roa.forge.dto.UserPrincipal;
 import com.roa.forge.entity.UserAccount;
 import com.roa.forge.service.UserAccountService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -16,6 +21,19 @@ import java.util.List;
 public class UserAccountController {
 
     private final UserAccountService userAccountService;
+
+    @GetMapping("/me")
+    @Operation(summary = "내 프로필 조회")
+    public MeResponse me(@AuthenticationPrincipal UserPrincipal me) {
+        return userAccountService.getMe(me);
+    }
+
+    @PutMapping("/me")
+    @Operation(summary = "내 프로필 수정")
+    public MeResponse updateMe(@AuthenticationPrincipal UserPrincipal me,
+                               @Valid @RequestBody ProfileUpdateRequest req) {
+        return userAccountService.updateMe(me, req);
+    }
 
     @GetMapping
     @Operation(summary = "모든 사용자 조회")

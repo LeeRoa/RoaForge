@@ -1,5 +1,6 @@
 package com.roa.forge.filter;
 
+import com.roa.forge.dto.UserPrincipal;
 import com.roa.forge.entity.UserAccount;
 import com.roa.forge.provider.JwtTokenProvider;
 import com.roa.forge.repository.UserAccountRepository;
@@ -47,19 +48,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     UserAccount user = userAccountRepository.findById(userId).orElse(null);
 
                     if (user != null && Boolean.TRUE.equals(user.getActive())) {
-                        Set<SimpleGrantedAuthority> authorities = user.getRoles().stream()
-                                .map(r -> {
-                                    String name = r.getName();
-                                    return new SimpleGrantedAuthority(
-                                            name.startsWith("ROLE_") ? name : "ROLE_" + name
-                                    );
-                                })
-                                .collect(Collectors.toSet());
+                        UserPrincipal principal = UserPrincipal.from(user);
 
                         var authentication = new UsernamePasswordAuthenticationToken(
-                                user.getUsername(),           // principal
-                                null,                         // no credentials
-                                authorities
+                                principal,                  // principal
+                                null,                       // credentials (이미 인증된 상태이므로 null)
+                                principal.getAuthorities()  // 권한 리스트 (Set -> List)
                         );
                         authentication.setDetails(
                                 new WebAuthenticationDetailsSource().buildDetails(request)

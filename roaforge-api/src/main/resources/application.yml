@@ -36,3 +36,6 @@ jwt:
   access-expiration-ms: 3600000       # 1h
   refresh-expiration-ms: 1209600000   # 14d
 
+springdoc:
+  swagger-ui:
+    disable-swagger-default-url: true

@@ -42,9 +42,8 @@ public class SecurityConfig {
                                 "/login/oauth2/**",
                                 "/oauth2/authorization/**"
                         ).permitAll()
-                        .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll() // 프리플라이트
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/users").permitAll()   // 목록
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/users/**").permitAll()// 상세/하위
+                        .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/auth/logout").authenticated()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(e -> e.authenticationEntryPoint(

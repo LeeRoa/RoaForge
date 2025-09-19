@@ -1,9 +1,11 @@
 package com.roa.forge.controller;
 
+import com.roa.forge.config.RefreshTokenDenylist;
 import com.roa.forge.dto.LoginRequest;
-import com.roa.forge.dto.TokenResponse;
 import com.roa.forge.dto.RegisterRequest;
+import com.roa.forge.dto.TokenResponse;
 import com.roa.forge.entity.UserAccount;
+import com.roa.forge.provider.JwtTokenProvider;
 import com.roa.forge.repository.UserAccountRepository;
 import com.roa.forge.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,11 +15,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.*;
-import com.roa.forge.provider.JwtTokenProvider;
-
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -28,6 +26,7 @@ public class AuthController {
     private final JwtTokenProvider jwtTokenProvider;
     private final AuthService authService;
     private final UserAccountRepository userAccountRepository;
+    private final RefreshTokenDenylist refreshDenylist;
 
     @PostMapping("/register")
     @Operation(summary = "회원가입", description = "username/email/password로 회원가입")
@@ -60,6 +59,12 @@ public class AuthController {
         if (!jwtTokenProvider.validateToken(refreshToken)) {
             throw new BadCredentialsException("재발급 된 토큰이 유효하지 않습니다.");
         }
+
+        String rjti = jwtTokenProvider.getJti(refreshToken);
+        if (refreshDenylist.isRevoked(rjti)) {
+            throw new BadCredentialsException("이미 로그아웃된 리프레시 토큰입니다.");
+        }
+
         // 1) refresh에서 userId 추출
         Long userId = jwtTokenProvider.getUserId(refreshToken);
 
@@ -70,5 +75,16 @@ public class AuthController {
         // 3) 새로운 accessToken 발급 (refreshToken은 기존 것 재사용)
         String newAccess = jwtTokenProvider.createAccessToken(user.getId(), user.getEmail(), user.getUsername(), user.getProvider());
         return new TokenResponse(newAccess, refreshToken);
+    }
+
+    @PostMapping("/logout")
+    public void logout(@RequestParam(required = false) String refreshToken) {
+        if (refreshToken != null && jwtTokenProvider.validateToken(refreshToken)) {
+            String jti = jwtTokenProvider.getJti(refreshToken);
+            var exp = jwtTokenProvider.getExpiration(refreshToken);
+            if (jti != null && exp != null) {
+                refreshDenylist.revoke(jti, exp.getTime()); // 만료까지 deny
+            }
+        }
     }
 }

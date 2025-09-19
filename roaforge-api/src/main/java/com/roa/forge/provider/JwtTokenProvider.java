@@ -31,6 +31,7 @@ public class JwtTokenProvider {
 
     public String createAccessToken(Long userId, String email, String username, String provider) {
         return Jwts.builder()
+                .setId(java.util.UUID.randomUUID().toString())   // jti
                 .setSubject(String.valueOf(userId))
                 .claim("email", email)     // 선택: 편의 클레임
                 .claim("uname", username)
@@ -43,11 +44,22 @@ public class JwtTokenProvider {
 
     public String createRefreshToken(Long userId) {
         return Jwts.builder()
+                .setId(java.util.UUID.randomUUID().toString())
                 .setSubject(String.valueOf(userId))
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + refreshExpMs))
                 .signWith(key, SignatureAlgorithm.HS256)
                 .compact();
+    }
+
+    public String getJti(String token) {
+        return Jwts.parserBuilder().setSigningKey(key).build()
+                .parseClaimsJws(token).getBody().getId(); // 과거 발급분은 null 가능
+    }
+
+    public Date getExpiration(String token) {
+        return Jwts.parserBuilder().setSigningKey(key).build()
+                .parseClaimsJws(token).getBody().getExpiration();
     }
 
     /** 유효성 검증 */

@@ -13,13 +13,12 @@ public class CorsConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
-        cfg.setAllowedOrigins(List.of(
-                "http://localhost:3000",   // 프론트
-                "http://localhost:8080"    // Swagger UI
-        ));
-        cfg.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
+        // 와일드카드 전면 허용 (credentials=false 필수)
+        cfg.setAllowedOriginPatterns(List.of("*"));
+        cfg.setAllowedMethods(List.of("*"));
         cfg.setAllowedHeaders(List.of("*"));
-        cfg.setAllowCredentials(true); // 쿠키 기반이면 true, 아니라면 false
+        cfg.setAllowCredentials(false);
+        cfg.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource src = new UrlBasedCorsConfigurationSource();
         src.registerCorsConfiguration("/**", cfg);

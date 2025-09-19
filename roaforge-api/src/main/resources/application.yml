@@ -26,10 +26,13 @@ spring:
             issuer-uri: https://accounts.google.com
 
 app:
-   oauth2:
-     redirect-uri: http://localhost:3000/oauth2/callback   # 성공 후 프론트 콜백
-
+  oauth2:
+    redirect-uri: http://localhost:3000/oauth2/callback   # 성공 후 프론트 콜백
+  # Test를 위한 더미 데이터 설정
+  seed:
+    enabled: true
 jwt:
   secret: "dev-THIS-IS-A-VERY-LONG-SECRET-STRING-AT-LEAST-32-BYTES"
   access-expiration-ms: 3600000       # 1h
   refresh-expiration-ms: 1209600000   # 14d
+

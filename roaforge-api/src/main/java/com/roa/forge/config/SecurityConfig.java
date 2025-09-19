@@ -17,17 +17,20 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import static jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED;
+
 @Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final CustomUserDetailsService customUserDetailsService;
+    private final CorsConfig corsConfig;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, GoogleSuccessHandler googleSuccessHandler) throws Exception {
         http
-                .cors(c -> {})
+                .cors(c -> c.configurationSource(corsConfig.corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
@@ -39,8 +42,14 @@ public class SecurityConfig {
                                 "/login/oauth2/**",
                                 "/oauth2/authorization/**"
                         ).permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll() // 프리플라이트
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/users").permitAll()   // 목록
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/users/**").permitAll()// 상세/하위
                         .anyRequest().authenticated()
                 )
+                .exceptionHandling(e -> e.authenticationEntryPoint(
+                        (req, res, ex) -> res.sendError(SC_UNAUTHORIZED, "Unauthorized")
+                ))
                 .oauth2Login(o -> o.successHandler(googleSuccessHandler));
 
 

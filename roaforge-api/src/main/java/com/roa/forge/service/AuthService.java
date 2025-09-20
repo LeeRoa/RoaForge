@@ -1,14 +1,19 @@
 package com.roa.forge.service;
 
-import com.roa.forge.dto.RegisterRequest;
-import com.roa.forge.dto.TokenResponse;
+import com.roa.forge.config.RefreshTokenDenylist;
+import com.roa.forge.dto.*;
 import com.roa.forge.entity.Role;
 import com.roa.forge.entity.UserAccount;
+import com.roa.forge.exception.AppException;
 import com.roa.forge.provider.JwtTokenProvider;
 import com.roa.forge.repository.RoleRepository;
 import com.roa.forge.repository.UserAccountRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.MessageSource;
+import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.security.authentication.*;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -18,14 +23,75 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AuthService {
 
+    private final AuthenticationManager authenticationManager;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final MessageSource messageSource;
     private final UserAccountRepository userRepo;
     private final RoleRepository roleRepo;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwt;
+    private final UserAccountRepository userAccountRepository;
+    private final RefreshTokenDenylist refreshDenylist;
 
     private Role ensureUserRole() {
         return roleRepo.findByName("ROLE_USER")
                 .orElseGet(() -> roleRepo.save(Role.builder().name("ROLE_USER").build()));
+    }
+
+    public TokenResponse refresh(String refreshToken) {
+        if (!jwtTokenProvider.validateToken(refreshToken)) {
+            throw new BadCredentialsException("재발급 된 토큰이 유효하지 않습니다.");
+        }
+
+        String rjti = jwtTokenProvider.getJti(refreshToken);
+        if (refreshDenylist.isRevoked(rjti)) {
+            throw new BadCredentialsException("이미 로그아웃된 리프레시 토큰입니다.");
+        }
+
+        // 1) refresh에서 userId 추출
+        Long userId = jwtTokenProvider.getUserId(refreshToken);
+
+        // 2) 최신 사용자 정보 조회(클레임 업데이트 목적)
+        UserAccount user = userAccountRepository.findById(userId)
+                .orElseThrow(() -> new BadCredentialsException("사용자를 찾을 수 없습니다."));
+
+        // 3) 새로운 accessToken 발급 (refreshToken은 기존 것 재사용)
+        String newAccess = jwtTokenProvider.createAccessToken(user.getId(), user.getEmail(), user.getUsername(), user.getProvider());
+        return new TokenResponse(newAccess, refreshToken);
+    }
+
+    public TokenResponse login(LoginRequest request) {
+        try {
+            Authentication auth = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
+            );
+
+            UserPrincipal p = (UserPrincipal) auth.getPrincipal();
+
+            String access  = jwtTokenProvider.createAccessToken(p.getId(), p.getEmail(), p.getUsername(), p.getProvider());
+            String refresh = jwtTokenProvider.createRefreshToken(p.getId());
+            return new TokenResponse(access, refresh);
+
+        } catch (BadCredentialsException e) {
+            throw new AppException(ErrorCode.UNAUTHORIZED,
+                    messageSource.getMessage("error.bad_credentials", null, "Invalid", LocaleContextHolder.getLocale()));
+        } catch (LockedException e) {
+            throw new AppException(ErrorCode.FORBIDDEN,
+                    messageSource.getMessage("error.account_locked", null, "Locked", LocaleContextHolder.getLocale()));
+        } catch (DisabledException e) {
+            throw new AppException(ErrorCode.FORBIDDEN,
+                    messageSource.getMessage("error.account_disabled", null, "Disabled", LocaleContextHolder.getLocale()));
+        }
+    }
+
+    public void logout(String refreshToken) {
+        if (refreshToken != null && jwtTokenProvider.validateToken(refreshToken)) {
+            String jti = jwtTokenProvider.getJti(refreshToken);
+            var exp = jwtTokenProvider.getExpiration(refreshToken);
+            if (jti != null && exp != null) {
+                refreshDenylist.revoke(jti, exp.getTime()); // 만료까지 deny
+            }
+        }
     }
 
     /** 로컬 회원가입: sub=userId 로 발급 */

@@ -12,13 +12,13 @@ public class AppException extends RuntimeException {
         this.code = code;
     }
 
-    public AppException(ErrorCode code, String message) {
-        super(message == null ? code.message() : message);
+    public AppException(ErrorCode code, String overrideMessage) {
+        super(overrideMessage == null ? code.message() : overrideMessage);
         this.code = code;
     }
 
-    // 메시지 포맷팅 지원 (e.g. "필드 %s 가 유효하지 않습니다.", field)
-    public static AppException of(ErrorCode code, String fmt, Object... args) {
+    /** 예: throw AppException.fmt(ErrorCode.INVALID_ARGUMENT, "필드 %s 가 유효하지 않습니다", "email") */
+    public static AppException fmt(ErrorCode code, String fmt, Object... args) {
         return new AppException(code, fmt == null ? null : String.format(fmt, args));
     }
 }

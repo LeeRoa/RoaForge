@@ -1,4 +1,12 @@
 spring:
+  messages:
+    basename: messages/messages
+  devtools:
+    restart:
+      enabled: true
+      # exclude: "static/**,public/**"
+    livereload:
+      enabled: true
   datasource:
     url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=MariaDB
     driver-class-name: org.h2.Driver
@@ -25,6 +33,15 @@ spring:
           google:
             issuer-uri: https://accounts.google.com
 
+
+server:
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+      force-response: true
+
 app:
   oauth2:
     redirect-uri: http://localhost:3000/oauth2/callback   # 성공 후 프론트 콜백
@@ -32,7 +49,7 @@ app:
   seed:
     enabled: true
 jwt:
-  secret: "dev-THIS-IS-A-VERY-LONG-SECRET-STRING-AT-LEAST-32-BYTES"
+  secret: "base64:qk6C0PqR8n2c9d3Yv5zVb8qT5V6qvYB0HGh3oS1QxwA="
   access-expiration-ms: 3600000       # 1h
   refresh-expiration-ms: 1209600000   # 14d
 

@@ -45,7 +45,7 @@ dependencies {
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
 
     // PDF 처리
-    implementation("org.apache.pdfbox:pdfbox:3.0.5")
+    implementation 'com.itextpdf:itext7-core:7.2.5'
 
     // PKI/CMS/OCSP/TSP (Bouncy Castle)
     implementation("org.bouncycastle:bcprov-jdk18on:1.81")

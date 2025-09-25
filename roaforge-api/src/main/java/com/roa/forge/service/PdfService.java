@@ -1,36 +1,27 @@
 package com.roa.forge.service;
 
-import com.itextpdf.kernel.pdf.PdfDocument;
-import com.itextpdf.kernel.pdf.PdfReader;
-import com.roa.forge.dto.ErrorCode;
-import com.roa.forge.entity.Document;
-import com.roa.forge.exception.AppException;
-import com.roa.forge.repository.DocumentRepository;
-import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.UUID;
+public interface PdfService {
+    byte[] addText(MultipartFile file, int page, float x, float y, String text,
+                   float fontSize, String colorHex, float rotationDeg,
+                   boolean whiteout, float whiteoutWidth, float whiteoutHeight) throws Exception;
 
-@Service
-@RequiredArgsConstructor
-public class PdfService {
-    private final Path uploadDir = Paths.get("uploads");
-    private final DocumentRepository documentRepository;
 
-    @PostConstruct
-    void init() {
-        if (!Files.exists(uploadDir)) {
-            try {
-                Files.createDirectories(uploadDir);
-            } catch (IOException e) {
-                throw new AppException(ErrorCode.STORAGE_IO_ERROR);
-            }
-        }
-    }
+    byte[] addWatermark(MultipartFile file, String text, float fontSize, String colorHex,
+                        float opacity, float rotationDeg) throws Exception;
+
+
+    byte[] addImage(MultipartFile pdf, org.springframework.web.multipart.MultipartFile image,
+                    int page, float x, float y, Float width, Float height, float opacity) throws Exception;
+
+
+    byte[] fillFormField(MultipartFile file, String fieldName, String value, float fontSize) throws Exception;
+
+
+    byte[] flattenForm(MultipartFile file) throws Exception;
+
+
+    byte[] addSignatureField(MultipartFile file, int page,
+                             float x, float y, float width, float height) throws Exception;
 }

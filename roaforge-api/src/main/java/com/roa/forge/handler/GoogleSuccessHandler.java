@@ -2,7 +2,7 @@ package com.roa.forge.handler;
 
 import com.roa.forge.dto.TokenResponse;
 import com.roa.forge.entity.UserAccount;
-import com.roa.forge.service.AuthService;
+import com.roa.forge.service.AuthServiceImpl;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +20,7 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class GoogleSuccessHandler implements AuthenticationSuccessHandler {
 
-    private final AuthService authService;
+    private final AuthServiceImpl authService;
 
     @Value("${app.oauth2.redirect-uri}")
     private String redirectUri;

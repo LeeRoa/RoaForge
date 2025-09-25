@@ -1,10 +1,8 @@
 package com.roa.forge.controller;
 
-import com.roa.forge.config.RefreshTokenDenylist;
 import com.roa.forge.dto.LoginRequest;
 import com.roa.forge.dto.RegisterRequest;
 import com.roa.forge.dto.TokenResponse;
-import com.roa.forge.provider.JwtTokenProvider;
 import com.roa.forge.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
@@ -17,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+
 
     @PostMapping("/register")
     @Operation(summary = "회원가입", description = "username/email/password로 회원가입")

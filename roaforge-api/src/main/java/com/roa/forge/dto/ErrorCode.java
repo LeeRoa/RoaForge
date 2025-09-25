@@ -25,6 +25,7 @@ public enum ErrorCode {
     TSA_REQUEST_FAILED("3004", "타임스탬프 서버 요청에 실패했습니다.", HttpStatus.BAD_GATEWAY, "error.tsa_request"),
     OCSP_REQUEST_FAILED("3005", "OCSP 검증 요청에 실패했습니다.", HttpStatus.BAD_GATEWAY, "error.ocsp_request"),
     STORAGE_IO_ERROR("3006", "저장소 I/O 오류가 발생했습니다.", HttpStatus.SERVICE_UNAVAILABLE, "error.storage_io"),
+    PDF_COLOR_NULL("3007", "색상 값이 없습니다.", HttpStatus.BAD_REQUEST, "error.null_color"),
 
     // ==== JWT/보안 키 (4xxx) ====
     JWT_SECRET_TOO_SHORT("4001", "JWT 시크릿 길이가 부족합니다. 최소 256비트(=32바이트) 이상이어야 합니다.", HttpStatus.INTERNAL_SERVER_ERROR, "error.jwt_secret_too_short");

@@ -17,6 +17,7 @@ import com.itextpdf.kernel.pdf.PdfWriter;
 import com.itextpdf.kernel.pdf.canvas.PdfCanvas;
 import com.itextpdf.kernel.pdf.extgstate.PdfExtGState;
 import com.itextpdf.layout.Canvas;
+import com.itextpdf.layout.Document;
 import com.itextpdf.layout.element.Image;
 import com.itextpdf.layout.element.Paragraph;
 import com.itextpdf.layout.properties.TextAlignment;
@@ -46,10 +47,13 @@ public class PdfServiceImpl implements PdfService {
     private final MessageSource messageSource;
     private final ResourceLoader resourceLoader;
 
+    /** 폰트 프로그램(바이트)만 캐시 — PdfFont 인스턴스는 절대 캐시 금지 */
+    private volatile byte[] cachedFontProgram;
+
     private PdfFont loadFont() throws IOException {
         if (cachedFont != null) return cachedFont;
 
-        Resource resource = resourceLoader.getResource(fontPath); // e.g. "classpath:fonts/NotoSansCJKkr-Regular.otf"
+        Resource resource = resourceLoader.getResource(fontPath);
         try (InputStream is = resource.getInputStream()) {
             byte[] fontBytes = is.readAllBytes();
             PdfFont font = PdfFontFactory.createFont(fontBytes, PdfEncodings.IDENTITY_H, PdfFontFactory.EmbeddingStrategy.PREFER_EMBEDDED, true);
@@ -104,38 +108,69 @@ public class PdfServiceImpl implements PdfService {
     }
 
     @Override
-    public byte[] addText(MultipartFile file, int page, float x, float y, String text, float fontSize, String colorHex, float rotationDeg, boolean whiteout, float whiteoutWidth, float whiteoutHeight) throws Exception {
-        PdfFont font = loadFont();
-        DeviceRgb color = parseHexColor(colorHex);
+    public byte[] addText(MultipartFile file, int page, float x, float y, String text,
+                          float fontSize, String colorHex, float rotationDeg,
+                          boolean whiteout, float whiteoutWidth, float whiteoutHeight) throws Exception {
 
-        try (InputStream in = file.getInputStream();
-             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-             PdfDocument pdfDoc = new PdfDocument(new PdfReader(in), new PdfWriter(baos))) {
+        try (var in = file.getInputStream();
+             var baos = new java.io.ByteArrayOutputStream();
+             var pdfDoc = new PdfDocument(new PdfReader(in), new PdfWriter(baos));
+             var doc = new Document(pdfDoc)) {
 
-            validatePage(pdfDoc, page);
+            // 1) 유효성
+            if (page < 1 || page > pdfDoc.getNumberOfPages()) {
+                throw new IllegalArgumentException("Invalid page: " + page);
+            }
+
+            PdfFont font = newPdfFontForDoc();
+            DeviceRgb color = parseHexColor(colorHex);
+            float rad = (float) Math.toRadians(rotationDeg);
+
             PdfPage pdfPage = pdfDoc.getPage(page);
-            PdfCanvas pdfCanvas = new PdfCanvas(pdfPage);
+            Rectangle pageSize = pdfPage.getPageSize();
 
+            // 3) 화이트아웃(선택)
             if (whiteout && whiteoutWidth > 0 && whiteoutHeight > 0) {
-                pdfCanvas.saveState();
-                pdfCanvas.setFillColor(new DeviceRgb(255, 255, 255));
-                pdfCanvas.rectangle(x, y, whiteoutWidth, whiteoutHeight);
-                pdfCanvas.fill();
-                pdfCanvas.restoreState();
+                var pc = new com.itextpdf.kernel.pdf.canvas.PdfCanvas(pdfPage);
+                pc.saveState();
+                pc.setFillColor(com.itextpdf.kernel.colors.ColorConstants.WHITE);
+                pc.rectangle(x, y, whiteoutWidth, whiteoutHeight);
+                pc.fill();
+                pc.restoreState();
             }
 
-            try (Canvas canvas = new Canvas(pdfCanvas, pdfPage.getPageSize())) {
-                Paragraph p = new Paragraph(text)
-                        .setFont(font)
-                        .setFontSize(fontSize)
-                        .setFontColor(color);
-                double rotationRad = Math.toRadians(rotationDeg);
-                canvas.showTextAligned(p, x, y, page, TextAlignment.LEFT, VerticalAlignment.BOTTOM, (float) rotationRad);
-            }
+            // 4) 텍스트
+            Paragraph p = new Paragraph(text)
+                    .setFont(font)
+                    .setFontSize(fontSize)
+                    .setFontColor(color);
 
-            pdfDoc.close();
+            doc.showTextAligned(p, x, y, page,
+                    TextAlignment.LEFT,
+                    VerticalAlignment.BOTTOM,
+                    rad);
+
+            // 5) 여기서 doc.close() 호출로 pdfDoc까지 닫힘 (try-with-resources로 자동)
             return baos.toByteArray();
         }
+    }
+
+    private byte[] getFontProgram() throws IOException {
+        byte[] fp = cachedFontProgram;
+        if (fp != null) return fp;
+        synchronized (this) {
+            if (cachedFontProgram == null) {
+                Resource res = resourceLoader.getResource(fontPath);
+                try (var is = res.getInputStream()) {
+                    cachedFontProgram = is.readAllBytes();
+                }
+            }
+            return cachedFontProgram;
+        }
+    }
+
+    private PdfFont newPdfFontForDoc() throws IOException {
+        return PdfFontFactory.createFont(getFontProgram(), PdfEncodings.IDENTITY_H);
     }
 
     @Override

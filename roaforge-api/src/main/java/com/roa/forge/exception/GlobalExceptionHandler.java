@@ -17,6 +17,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.LocaleResolver;
 
@@ -89,6 +91,16 @@ public class GlobalExceptionHandler {
                 })
                 .toList();
         return failWithErrors(locale, details);
+    }
+
+    @ExceptionHandler({ MaxUploadSizeExceededException.class, MultipartException.class })
+    public ResponseEntity<ApiResponse<Void>> handleUploadTooLarge(HttpServletRequest req) {
+        Locale locale = locale(req);
+        String msg = i18n("error.payload_too_large", "PAYLOAD_TOO_LARGE", locale);
+        return ResponseEntity
+                .status(ErrorCode.PAYLOAD_TOO_LARGE.status())
+                .contentType(JsonMediaTypes.APPLICATION_JSON_UTF8)
+                .body(ApiResponse.fail(ErrorCode.PAYLOAD_TOO_LARGE.code(), msg));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

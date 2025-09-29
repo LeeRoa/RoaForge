@@ -1,5 +1,7 @@
 package com.roa.forge.controller;
 
+import com.roa.forge.dto.PdfEditRequest;
+import com.roa.forge.dto.PdfImageInsertRequest;
 import com.roa.forge.dto.PdfResult;
 import com.roa.forge.dto.ResponseWrapAdvice;
 import com.roa.forge.policy.FilenamePolicy;
@@ -7,14 +9,19 @@ import com.roa.forge.service.PdfService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.util.UriUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Map;
 
 @Validated
 @RestController
@@ -23,6 +30,7 @@ import java.util.Base64;
 @Tag(name = "PDF", description = "PDF 편집/가공 API")
 public class PdfController {
     private final PdfService pdfService;
+    private static final String NO_CACHE_HEADER = "no-store, no-cache, must-revalidate, max-age=0";
 
     private PdfResult setPdfResult(byte[] bytes, String filename) {
         String b64 = Base64.getEncoder().encodeToString(bytes);
@@ -63,7 +71,7 @@ public class PdfController {
     @PostMapping(
             value = "/text/download",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
-            produces = MediaType.APPLICATION_PDF_VALUE)
+            produces = { MediaType.APPLICATION_PDF_VALUE, MediaType.APPLICATION_JSON_VALUE })
     @ResponseWrapAdvice.NoWrap
     public ResponseEntity<byte[]> addTextDownload(
             @Parameter(description = "원본 PDF 파일", required = true)
@@ -90,5 +98,62 @@ public class PdfController {
                 .contentType(MediaType.APPLICATION_PDF)
                 .header("Content-Disposition","attachment; filename=\"" + filename + "\"")
                 .body(out);
+    }
+
+    /*
+        PDF 편집 - Image
+     */
+    @PostMapping(
+            value = "/image/download",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+            produces = { MediaType.APPLICATION_PDF_VALUE, MediaType.APPLICATION_JSON_VALUE }
+    )
+    @ResponseWrapAdvice.NoWrap
+    @Operation(summary = "이미지 추가 (다운로드)")
+    public ResponseEntity<byte[]> addImageDownload(
+            @RequestPart("pdf") MultipartFile pdf,
+            @RequestPart("image") MultipartFile image,
+            @Valid @ModelAttribute PdfImageInsertRequest req
+    ) throws Exception {
+        byte[] pdfBytes = pdfService.addImage(pdf, image, req);
+        String filename = FilenamePolicy.build("image", pdf.getOriginalFilename(), req.getOutputName());
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .contentLength(pdfBytes.length)
+                .header(HttpHeaders.CONTENT_DISPOSITION, buildContentDisposition(filename))
+                .header(HttpHeaders.CACHE_CONTROL, NO_CACHE_HEADER)
+                .header("Pragma", "no-cache")
+                .body(pdfBytes);
+    }
+
+    private String buildContentDisposition(String filename) {
+        String asciiFallback = filename.replaceAll("[^\\x20-\\x7E]", "_");
+        String encoded = UriUtils.encode(filename, StandardCharsets.UTF_8);
+        return "attachment; filename=\"" + asciiFallback + "\"; filename*=UTF-8''" + encoded;
+    }
+
+    @PostMapping(
+            value = "/edit",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+            produces = { MediaType.APPLICATION_PDF_VALUE, MediaType.APPLICATION_JSON_VALUE }
+    )
+    @ResponseWrapAdvice.NoWrap
+    @Operation(summary = "배치 편집(다운로드)", description = "여러 작업을 한 번에 적용하고 PDF 바이너리로 반환")
+    public ResponseEntity<byte[]> edit(
+            @RequestPart("pdf") MultipartFile pdf,
+            @Valid @ModelAttribute PdfEditRequest req,
+            @RequestPart(required = false) Map<String, MultipartFile> imageParts
+    ) throws Exception {
+        byte[] pdfBytes = pdfService.edit(pdf, req, imageParts == null ? Map.of() : imageParts);
+        String filename = FilenamePolicy.build("edit", pdf.getOriginalFilename(), req.getOutputName());
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .contentLength(pdfBytes.length)
+                .header(HttpHeaders.CONTENT_DISPOSITION, buildContentDisposition(filename))
+                .header(HttpHeaders.CACHE_CONTROL, NO_CACHE_HEADER)
+                .header("Pragma", "no-cache")
+                .body(pdfBytes);
     }
 }

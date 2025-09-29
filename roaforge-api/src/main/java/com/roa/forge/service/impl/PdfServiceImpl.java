@@ -23,6 +23,8 @@ import com.itextpdf.layout.element.Paragraph;
 import com.itextpdf.layout.properties.TextAlignment;
 import com.itextpdf.layout.properties.VerticalAlignment;
 import com.roa.forge.dto.ErrorCode;
+import com.roa.forge.dto.PdfEditRequest;
+import com.roa.forge.dto.PdfImageInsertRequest;
 import com.roa.forge.exception.AppException;
 import com.roa.forge.service.PdfService;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +39,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -212,11 +215,8 @@ public class PdfServiceImpl implements PdfService {
 
     @Override
     public byte[] addImage(MultipartFile pdf, MultipartFile image,
-                           int page, float x, float y,
-                           Float width, Float height, float opacity) throws Exception {
-        // opacity 클램핑 (선택)
-        if (opacity < 0f) opacity = 0f;
-        if (opacity > 1f) opacity = 1f;
+                           PdfImageInsertRequest req) throws Exception {
+        float opacity = clampOpacity(req.getOpacity() == null ? 1.0f : req.getOpacity());
 
         try (InputStream inPdf = pdf.getInputStream();
              InputStream inImg = image.getInputStream();
@@ -225,16 +225,16 @@ public class PdfServiceImpl implements PdfService {
             PdfDocument pdfDoc = new PdfDocument(new PdfReader(inPdf), new PdfWriter(baos));
             try (Document doc = new Document(pdfDoc)) {
                 // 페이지 검증
-                validatePage(pdfDoc, page);
+                validatePage(pdfDoc, req.getPage());
 
                 // 이미지 데이터
                 byte[] imgBytes = inImg.readAllBytes();
                 ImageData imgData = ImageDataFactory.create(imgBytes);
-                Image img = getImage(width, height, imgData);
+                Image img = getImage(imgData, req.getWidth(), req.getHeight());
 
                 // 위치/불투명도 설정
-                img.setFixedPosition(page, x, y); // 좌하단 기준 (pt)
-                img.setOpacity(opacity);          // 0.0 ~ 1.0
+                img.setFixedPosition(req.getPage(), req.getX(), req.getY());
+                img.setOpacity(opacity);
 
                 doc.add(img);
             }
@@ -243,29 +243,28 @@ public class PdfServiceImpl implements PdfService {
         }
     }
 
-    private Image getImage(Float width, Float height, ImageData imgData) {
-        Image img = new Image(imgData);
+    private float clampOpacity(float value) {
+        if (value < 0f) return 0f;
+        return Math.min(value, 1f);
+    }
 
-        // 크기 결정 (비율 유지)
+    private Image getImage(ImageData imgData, Float width, Float height) {
+        Image img = new Image(imgData);
         float naturalW = imgData.getWidth();
         float naturalH = imgData.getHeight();
 
         if (width != null && height != null) {
-            // 둘 다 지정 → 정확히 맞춤 (비율 무시)
             img.setWidth(width);
             img.setHeight(height);
         } else if (width != null) {
-            // width 만 지정 → 비율 유지
             float scale = width / naturalW;
             img.setWidth(width);
             img.setHeight(naturalH * scale);
         } else if (height != null) {
-            // height 만 지정 → 비율 유지
             float scale = height / naturalH;
             img.setWidth(naturalW * scale);
             img.setHeight(height);
         } else {
-            // 아무것도 없으면 원본 크기 그대로
             img.setAutoScale(false);
         }
         return img;
@@ -324,5 +323,107 @@ public class PdfServiceImpl implements PdfService {
             pdfDoc.close();
             return baos.toByteArray();
         }
+    }
+
+    @Override
+    public byte[] edit(MultipartFile pdf, PdfEditRequest req, Map<String, MultipartFile> imageParts) throws Exception {
+        try (InputStream inPdf = pdf.getInputStream();
+             ByteArrayOutputStream baos = new ByteArrayOutputStream();
+             PdfDocument pdfDoc = new PdfDocument(new PdfReader(inPdf), new PdfWriter(baos));
+             Document doc = new com.itextpdf.layout.Document(pdfDoc)) {
+
+            for (PdfEditRequest.Operation op : req.getOperations()) {
+                switch (op.getType()) {
+                    case TEXT -> handleText(doc, pdfDoc, (PdfEditRequest.TextOp) op);
+                    case IMAGE -> handleImage(doc, pdfDoc, (PdfEditRequest.ImageOp) op, imageParts);
+                    case RECT -> drawRect(pdfDoc, (PdfEditRequest.RectOp) op);
+                    case LINE -> drawLine(pdfDoc, (PdfEditRequest.LineOp) op);
+                    default -> throw new IllegalArgumentException("Unsupported operation: " + op.getType());
+                }
+            }
+            // Document/PdfDocument try-with-resources가 flush/close 처리
+            return baos.toByteArray();
+        }
+    }
+
+    private void handleText(Document doc, PdfDocument pdfDoc, PdfEditRequest.TextOp textOp) throws Exception {
+        // 페이지 검증
+        validatePage(pdfDoc, textOp.getPage());
+
+        com.itextpdf.kernel.font.PdfFont font = newPdfFontForDoc();
+        com.itextpdf.kernel.colors.DeviceRgb color = parseHexColor(textOp.getColorHex());
+        float rad = (float) Math.toRadians(textOp.getRotationDeg());
+
+        com.itextpdf.kernel.pdf.PdfPage pdfPage = pdfDoc.getPage(textOp.getPage());
+
+        if (textOp.isWhiteout() && textOp.getWhiteoutWidth() > 0 && textOp.getWhiteoutHeight() > 0) {
+            com.itextpdf.kernel.pdf.canvas.PdfCanvas pc = new com.itextpdf.kernel.pdf.canvas.PdfCanvas(pdfPage);
+            pc.saveState();
+            pc.setFillColor(com.itextpdf.kernel.colors.ColorConstants.WHITE);
+            pc.rectangle(textOp.getX(), textOp.getY(), textOp.getWhiteoutWidth(), textOp.getWhiteoutHeight());
+            pc.fill();
+            pc.restoreState();
+        }
+
+        Paragraph p = new Paragraph(textOp.getText())
+                .setFont(font)
+                .setFontSize(textOp.getFontSize())
+                .setFontColor(color);
+
+        doc.showTextAligned(p, textOp.getX(), textOp.getY(), textOp.getPage(), TextAlignment.LEFT, VerticalAlignment.BOTTOM, rad);
+    }
+
+    private void handleImage(Document doc, PdfDocument pdfDoc, PdfEditRequest.ImageOp imageOp,
+                             Map<String, MultipartFile> imageParts) throws Exception {
+        if (imageOp.getPage() < 1 || imageOp.getPage() > pdfDoc.getNumberOfPages()) {
+            throw new IllegalArgumentException("Invalid page: " + imageOp.getPage());
+        }
+        MultipartFile image = imageParts.get(imageOp.getImageKey());
+        if (image == null) {
+            throw new IllegalArgumentException("Image part not found for key: " + imageOp.getImageKey());
+        }
+
+        float opacity = clampOpacity(imageOp.getOpacity() == null ? 1.0f : imageOp.getOpacity());
+
+        try (InputStream inImg = image.getInputStream()) {
+            byte[] imgBytes = inImg.readAllBytes();
+            ImageData imgData = ImageDataFactory.create(imgBytes);
+            Image img = getImage(imgData, imageOp.getWidth(), imageOp.getHeight());
+
+            img.setFixedPosition(imageOp.getPage(), imageOp.getX(), imageOp.getY());
+            img.setOpacity(opacity);
+
+            doc.add(img);
+        }
+    }
+
+    private void drawRect(PdfDocument pdfDoc, PdfEditRequest.RectOp rectOp) {
+        validatePage(pdfDoc, rectOp.page);
+        var pc = new PdfCanvas(pdfDoc.getPage(rectOp.page));
+        pc.saveState();
+        var opacity = Math.max(0f, Math.min(1f, rectOp.opacity));
+        var gs = new PdfExtGState().setFillOpacity(opacity).setStrokeOpacity(opacity);
+        pc.setExtGState(gs);
+        if (rectOp.fillColor != null) pc.setFillColor(parseHexColor(rectOp.fillColor));
+        if (rectOp.strokeColor != null) pc.setStrokeColor(parseHexColor(rectOp.strokeColor));
+        if (rectOp.strokeWidth != null) pc.setLineWidth(rectOp.strokeWidth);
+        pc.rectangle(rectOp.x, rectOp.y, rectOp.w, rectOp.h);
+        if (rectOp.fillColor != null && rectOp.strokeColor != null) pc.fillStroke();
+        else if (rectOp.fillColor != null) pc.fill();
+        else pc.stroke();
+        pc.restoreState();
+    }
+
+    private void drawLine(PdfDocument pdfDoc, PdfEditRequest.LineOp lineOp) {
+        validatePage(pdfDoc, lineOp.page);
+        var pc = new PdfCanvas(pdfDoc.getPage(lineOp.page));
+        pc.saveState();
+        var opacity = Math.max(0f, Math.min(1f, lineOp.opacity));
+        var gs = new PdfExtGState().setStrokeOpacity(opacity);
+        pc.setExtGState(gs);
+        if (lineOp.strokeColor != null) pc.setStrokeColor(parseHexColor(lineOp.strokeColor));
+        if (lineOp.strokeWidth != null) pc.setLineWidth(lineOp.strokeWidth);
+        pc.moveTo(lineOp.x1, lineOp.y1).lineTo(lineOp.x2, lineOp.y2).stroke();
+        pc.restoreState();
     }
 }

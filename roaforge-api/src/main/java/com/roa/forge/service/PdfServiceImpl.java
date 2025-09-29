@@ -112,45 +112,43 @@ public class PdfServiceImpl implements PdfService {
                           float fontSize, String colorHex, float rotationDeg,
                           boolean whiteout, float whiteoutWidth, float whiteoutHeight) throws Exception {
 
-        try (var in = file.getInputStream();
-             var baos = new java.io.ByteArrayOutputStream();
-             var pdfDoc = new PdfDocument(new PdfReader(in), new PdfWriter(baos));
-             var doc = new Document(pdfDoc)) {
+        try (InputStream in = file.getInputStream();
+             ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
 
-            // 1) 유효성
-            if (page < 1 || page > pdfDoc.getNumberOfPages()) {
-                throw new IllegalArgumentException("Invalid page: " + page);
+            PdfDocument pdfDoc = new PdfDocument(new PdfReader(in), new PdfWriter(baos));
+            try (Document doc = new Document(pdfDoc)) {
+                // 유효성
+                if (page < 1 || page > pdfDoc.getNumberOfPages()) {
+                    throw new IllegalArgumentException("Invalid page: " + page);
+                }
+
+                PdfFont font = newPdfFontForDoc();             // 문서 전용 폰트(요청마다 새로)
+                DeviceRgb color = parseHexColor(colorHex);
+                float rad = (float) Math.toRadians(rotationDeg);
+
+                PdfPage pdfPage = pdfDoc.getPage(page);
+
+                // 화이트아웃(선택)
+                if (whiteout && whiteoutWidth > 0 && whiteoutHeight > 0) {
+                    PdfCanvas pc = new PdfCanvas(pdfPage);
+                    pc.saveState();
+                    pc.setFillColor(com.itextpdf.kernel.colors.ColorConstants.WHITE);
+                    pc.rectangle(x, y, whiteoutWidth, whiteoutHeight);
+                    pc.fill();
+                    pc.restoreState();
+                }
+
+                // 텍스트
+                Paragraph p = new Paragraph(text)
+                        .setFont(font)
+                        .setFontSize(fontSize)
+                        .setFontColor(color);
+
+                doc.showTextAligned(p, x, y, page,
+                        TextAlignment.LEFT, VerticalAlignment.BOTTOM, rad);
+
             }
 
-            PdfFont font = newPdfFontForDoc();
-            DeviceRgb color = parseHexColor(colorHex);
-            float rad = (float) Math.toRadians(rotationDeg);
-
-            PdfPage pdfPage = pdfDoc.getPage(page);
-            Rectangle pageSize = pdfPage.getPageSize();
-
-            // 3) 화이트아웃(선택)
-            if (whiteout && whiteoutWidth > 0 && whiteoutHeight > 0) {
-                var pc = new com.itextpdf.kernel.pdf.canvas.PdfCanvas(pdfPage);
-                pc.saveState();
-                pc.setFillColor(com.itextpdf.kernel.colors.ColorConstants.WHITE);
-                pc.rectangle(x, y, whiteoutWidth, whiteoutHeight);
-                pc.fill();
-                pc.restoreState();
-            }
-
-            // 4) 텍스트
-            Paragraph p = new Paragraph(text)
-                    .setFont(font)
-                    .setFontSize(fontSize)
-                    .setFontColor(color);
-
-            doc.showTextAligned(p, x, y, page,
-                    TextAlignment.LEFT,
-                    VerticalAlignment.BOTTOM,
-                    rad);
-
-            // 5) 여기서 doc.close() 호출로 pdfDoc까지 닫힘 (try-with-resources로 자동)
             return baos.toByteArray();
         }
     }

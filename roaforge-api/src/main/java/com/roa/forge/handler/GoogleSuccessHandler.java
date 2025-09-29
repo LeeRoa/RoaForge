@@ -2,7 +2,7 @@ package com.roa.forge.handler;
 
 import com.roa.forge.dto.TokenResponse;
 import com.roa.forge.entity.UserAccount;
-import com.roa.forge.service.AuthServiceImpl;
+import com.roa.forge.service.impl.AuthServiceImpl;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;

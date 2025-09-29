@@ -57,6 +57,9 @@ public class PdfController {
         return setPdfResult(pdfService.addText(file, page, x, y, text, fontSize, colorHex, rotationDeg, whiteout, whiteoutWidth, whiteoutHeight), filename);
     }
 
+    /*
+        PDF 편집 - Text
+     */
     @PostMapping(
             value = "/text/download",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE,

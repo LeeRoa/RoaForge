@@ -1,4 +1,4 @@
-package com.roa.forge.service;
+package com.roa.forge.service.impl;
 
 import com.roa.forge.entity.UserAccount;
 import com.roa.forge.repository.UserAccountRepository;

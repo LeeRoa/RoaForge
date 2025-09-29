@@ -1,4 +1,4 @@
-package com.roa.forge.service;
+package com.roa.forge.service.impl;
 
 import com.roa.forge.config.RefreshTokenDenylist;
 import com.roa.forge.dto.*;
@@ -8,6 +8,7 @@ import com.roa.forge.exception.AppException;
 import com.roa.forge.provider.JwtTokenProvider;
 import com.roa.forge.repository.RoleRepository;
 import com.roa.forge.repository.UserAccountRepository;
+import com.roa.forge.service.AuthService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.MessageSource;

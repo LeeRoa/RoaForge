@@ -1,4 +1,4 @@
-package com.roa.forge.service;
+package com.roa.forge.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;

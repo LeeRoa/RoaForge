@@ -1,9 +1,8 @@
 package com.roa.forge.config;
 
 import com.roa.forge.filter.JwtAuthenticationFilter;
-import com.roa.forge.handler.GoogleSuccessHandler;
 import com.roa.forge.handler.JsonSecurityHandlers;
-import com.roa.forge.service.CustomUserDetailsService;
+import com.roa.forge.service.impl.CustomUserDetailsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,7 +15,6 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @RequiredArgsConstructor
@@ -27,6 +25,7 @@ public class SecurityConfig {
     private final CorsConfig corsConfig;
     private final JsonSecurityHandlers jsonSecurityHandlers;
 
+    // Test를 위해 잠시 주석처리
 //    @Bean
 //    public SecurityFilterChain filterChain(HttpSecurity http, GoogleSuccessHandler googleSuccessHandler) throws Exception {
 //        http

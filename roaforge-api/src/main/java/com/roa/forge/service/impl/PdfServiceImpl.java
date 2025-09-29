@@ -1,4 +1,4 @@
-package com.roa.forge.service;
+package com.roa.forge.service.impl;
 
 import com.itextpdf.forms.PdfAcroForm;
 import com.itextpdf.forms.fields.PdfFormField;
@@ -24,6 +24,7 @@ import com.itextpdf.layout.properties.TextAlignment;
 import com.itextpdf.layout.properties.VerticalAlignment;
 import com.roa.forge.dto.ErrorCode;
 import com.roa.forge.exception.AppException;
+import com.roa.forge.service.PdfService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.MessageSource;
@@ -210,31 +211,64 @@ public class PdfServiceImpl implements PdfService {
     }
 
     @Override
-    public byte[] addImage(MultipartFile pdf, MultipartFile image, int page, float x, float y, Float width, Float height, float opacity) throws Exception {
+    public byte[] addImage(MultipartFile pdf, MultipartFile image,
+                           int page, float x, float y,
+                           Float width, Float height, float opacity) throws Exception {
+        // opacity 클램핑 (선택)
+        if (opacity < 0f) opacity = 0f;
+        if (opacity > 1f) opacity = 1f;
+
         try (InputStream inPdf = pdf.getInputStream();
              InputStream inImg = image.getInputStream();
-             ByteArrayOutputStream baos = new ByteArrayOutputStream();
-             PdfDocument pdfDoc = new PdfDocument(new PdfReader(inPdf), new PdfWriter(baos))) {
+             ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
 
-            validatePage(pdfDoc, page);
-            PdfPage pdfPage = pdfDoc.getPage(page);
-            Rectangle pageSize = pdfPage.getPageSize();
+            PdfDocument pdfDoc = new PdfDocument(new PdfReader(inPdf), new PdfWriter(baos));
+            try (Document doc = new Document(pdfDoc)) {
+                // 페이지 검증
+                validatePage(pdfDoc, page);
 
-            byte[] imgBytes = inImg.readAllBytes();
-            ImageData imgData = ImageDataFactory.create(imgBytes);
-            Image img = new Image(imgData).setFixedPosition(page, x, y);
-            img.setOpacity(opacity);
-            if (width != null) img.setWidth(width);
-            if (height != null) img.setHeight(height);
+                // 이미지 데이터
+                byte[] imgBytes = inImg.readAllBytes();
+                ImageData imgData = ImageDataFactory.create(imgBytes);
+                Image img = getImage(width, height, imgData);
 
+                // 위치/불투명도 설정
+                img.setFixedPosition(page, x, y); // 좌하단 기준 (pt)
+                img.setOpacity(opacity);          // 0.0 ~ 1.0
 
-            try (Canvas canvas = new Canvas(pdfPage, pageSize)) {
-                canvas.add(img);
+                doc.add(img);
             }
 
-            pdfDoc.close();
             return baos.toByteArray();
         }
+    }
+
+    private Image getImage(Float width, Float height, ImageData imgData) {
+        Image img = new Image(imgData);
+
+        // 크기 결정 (비율 유지)
+        float naturalW = imgData.getWidth();
+        float naturalH = imgData.getHeight();
+
+        if (width != null && height != null) {
+            // 둘 다 지정 → 정확히 맞춤 (비율 무시)
+            img.setWidth(width);
+            img.setHeight(height);
+        } else if (width != null) {
+            // width 만 지정 → 비율 유지
+            float scale = width / naturalW;
+            img.setWidth(width);
+            img.setHeight(naturalH * scale);
+        } else if (height != null) {
+            // height 만 지정 → 비율 유지
+            float scale = height / naturalH;
+            img.setWidth(naturalW * scale);
+            img.setHeight(height);
+        } else {
+            // 아무것도 없으면 원본 크기 그대로
+            img.setAutoScale(false);
+        }
+        return img;
     }
 
     @Override

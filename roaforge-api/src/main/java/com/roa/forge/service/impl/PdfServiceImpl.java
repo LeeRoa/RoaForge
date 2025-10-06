@@ -39,6 +39,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -47,24 +50,11 @@ public class PdfServiceImpl implements PdfService {
 
     @Value("${app.pdf.font-path}")
     private String fontPath;
-    private volatile PdfFont cachedFont;
     private final MessageSource messageSource;
     private final ResourceLoader resourceLoader;
 
     /** 폰트 프로그램(바이트)만 캐시 — PdfFont 인스턴스는 절대 캐시 금지 */
     private volatile byte[] cachedFontProgram;
-
-    private PdfFont loadFont() throws IOException {
-        if (cachedFont != null) return cachedFont;
-
-        Resource resource = resourceLoader.getResource(fontPath);
-        try (InputStream is = resource.getInputStream()) {
-            byte[] fontBytes = is.readAllBytes();
-            PdfFont font = PdfFontFactory.createFont(fontBytes, PdfEncodings.IDENTITY_H, PdfFontFactory.EmbeddingStrategy.PREFER_EMBEDDED, true);
-            cachedFont = font;
-            return font;
-        }
-    }
 
     private DeviceRgb parseHexColor(String hexLiteral) {
         if (hexLiteral == null) {
@@ -177,7 +167,7 @@ public class PdfServiceImpl implements PdfService {
 
     @Override
     public byte[] addWatermark(MultipartFile file, String text, float fontSize, String colorHex, float opacity, float rotationDeg) throws Exception {
-        PdfFont font = loadFont();
+        PdfFont font = newPdfFontForDoc();
         DeviceRgb color = parseHexColor(colorHex);
 
         try (InputStream in = file.getInputStream();
@@ -272,7 +262,7 @@ public class PdfServiceImpl implements PdfService {
 
     @Override
     public byte[] fillFormField(MultipartFile file, String fieldName, String value, float fontSize) throws Exception {
-        PdfFont font = loadFont();
+        PdfFont font = newPdfFontForDoc();
         try (InputStream in = file.getInputStream();
              ByteArrayOutputStream baos = new ByteArrayOutputStream();
              PdfDocument pdfDoc = new PdfDocument(new PdfReader(in), new PdfWriter(baos))) {
@@ -330,34 +320,62 @@ public class PdfServiceImpl implements PdfService {
         try (InputStream inPdf = pdf.getInputStream();
              ByteArrayOutputStream baos = new ByteArrayOutputStream();
              PdfDocument pdfDoc = new PdfDocument(new PdfReader(inPdf), new PdfWriter(baos));
-             Document doc = new com.itextpdf.layout.Document(pdfDoc)) {
+             Document doc = new Document(pdfDoc)) {
 
-            for (PdfEditRequest.Operation op : req.getOperations()) {
+            PdfFont sharedFont = newPdfFontForDoc();
+
+            // 1) Z 정렬: null이면 0, 동일 z는 입력 순서 유지
+            List<PdfEditRequest.Operation> ops = new ArrayList<>(req.getOperations());
+            ops.sort(Comparator.comparingInt(o -> (o.getZ() == null ? 0 : o.getZ())));
+
+            // 2) 수행
+            for (PdfEditRequest.Operation op : ops) {
                 switch (op.getType()) {
-                    case TEXT -> handleText(doc, pdfDoc, (PdfEditRequest.TextOp) op);
-                    case IMAGE -> handleImage(doc, pdfDoc, (PdfEditRequest.ImageOp) op, imageParts);
-                    case RECT -> drawRect(pdfDoc, (PdfEditRequest.RectOp) op);
-                    case LINE -> drawLine(pdfDoc, (PdfEditRequest.LineOp) op);
+                    case "text" -> handleText(doc, pdfDoc, (PdfEditRequest.TextOp) op, req, sharedFont);
+                    case "image" -> handleImage(doc, pdfDoc, (PdfEditRequest.ImageOp) op, imageParts);
+                    case "rect" -> drawRect(pdfDoc, (PdfEditRequest.RectOp) op);
+                    case "line" -> drawLine(pdfDoc, (PdfEditRequest.LineOp) op);
                     default -> throw new IllegalArgumentException("Unsupported operation: " + op.getType());
                 }
             }
-            // Document/PdfDocument try-with-resources가 flush/close 처리
+
+            pdfDoc.close();
             return baos.toByteArray();
         }
     }
 
-    private void handleText(Document doc, PdfDocument pdfDoc, PdfEditRequest.TextOp textOp) throws Exception {
-        // 페이지 검증
+    /** color 우선순위: op.colorHex → req.defaultTextColor → "#000000" */
+    private DeviceRgb resolveTextColor(String opColorHex, String reqDefaultHex) {
+        String hex = (opColorHex != null && !opColorHex.isBlank())
+                ? opColorHex
+                : (reqDefaultHex != null && !reqDefaultHex.isBlank() ? reqDefaultHex : "#000000");
+        return parseHexColor(hex);
+    }
+
+    /** fontSize 우선순위: op.fontSize → req.defaultFontSize → 12f */
+    private float resolveFontSize(Float opFontSize, Float reqDefaultFontSize) {
+        if (opFontSize != null && opFontSize > 0f) return opFontSize;
+        if (reqDefaultFontSize != null && reqDefaultFontSize > 0f) return reqDefaultFontSize;
+        return 12f;
+    }
+
+    private void handleText(Document doc, PdfDocument pdfDoc,
+                            PdfEditRequest.TextOp textOp, PdfEditRequest rootReq,
+                            PdfFont font) {
+
         validatePage(pdfDoc, textOp.getPage());
 
-        com.itextpdf.kernel.font.PdfFont font = newPdfFontForDoc();
-        com.itextpdf.kernel.colors.DeviceRgb color = parseHexColor(textOp.getColorHex());
+        DeviceRgb color = resolveTextColor(textOp.getColorHex(), rootReq.getDefaultTextColor());
+        float fontSize = resolveFontSize(textOp.getFontSize(), rootReq.getDefaultFontSize());
         float rad = (float) Math.toRadians(textOp.getRotationDeg());
 
-        com.itextpdf.kernel.pdf.PdfPage pdfPage = pdfDoc.getPage(textOp.getPage());
+        PdfPage pdfPage = pdfDoc.getPage(textOp.getPage());
 
-        if (textOp.isWhiteout() && textOp.getWhiteoutWidth() > 0 && textOp.getWhiteoutHeight() > 0) {
-            com.itextpdf.kernel.pdf.canvas.PdfCanvas pc = new com.itextpdf.kernel.pdf.canvas.PdfCanvas(pdfPage);
+        // 화이트아웃
+        if (textOp.isWhiteout()
+                && textOp.getWhiteoutWidth() != null && textOp.getWhiteoutWidth() > 0
+                && textOp.getWhiteoutHeight() != null && textOp.getWhiteoutHeight() > 0) {
+            PdfCanvas pc = new PdfCanvas(pdfPage);
             pc.saveState();
             pc.setFillColor(com.itextpdf.kernel.colors.ColorConstants.WHITE);
             pc.rectangle(textOp.getX(), textOp.getY(), textOp.getWhiteoutWidth(), textOp.getWhiteoutHeight());
@@ -367,28 +385,34 @@ public class PdfServiceImpl implements PdfService {
 
         Paragraph p = new Paragraph(textOp.getText())
                 .setFont(font)
-                .setFontSize(textOp.getFontSize())
+                .setFontSize(fontSize)
                 .setFontColor(color);
 
-        doc.showTextAligned(p, textOp.getX(), textOp.getY(), textOp.getPage(), TextAlignment.LEFT, VerticalAlignment.BOTTOM, rad);
+        doc.showTextAligned(p, textOp.getX(), textOp.getY(), textOp.getPage(),
+                TextAlignment.LEFT, VerticalAlignment.BOTTOM, rad);
     }
 
     private void handleImage(Document doc, PdfDocument pdfDoc, PdfEditRequest.ImageOp imageOp,
-                             Map<String, MultipartFile> imageParts) throws Exception {
-        if (imageOp.getPage() < 1 || imageOp.getPage() > pdfDoc.getNumberOfPages()) {
-            throw new IllegalArgumentException("Invalid page: " + imageOp.getPage());
-        }
-        MultipartFile image = imageParts.get(imageOp.getImageKey());
+                             Map<String, MultipartFile> imageParts) throws RuntimeException, IOException {
+        validatePage(pdfDoc, imageOp.getPage());
+
+        // DTO: asset 키로 멀티파트 파트 매칭
+        MultipartFile image = imageParts.get(imageOp.getAsset());
         if (image == null) {
-            throw new IllegalArgumentException("Image part not found for key: " + imageOp.getImageKey());
+            throw new IllegalArgumentException("Image part not found for asset key: " + imageOp.getAsset());
         }
 
-        float opacity = clampOpacity(imageOp.getOpacity() == null ? 1.0f : imageOp.getOpacity());
+        float opacity = clampOpacity(imageOp.getOpacity());
 
         try (InputStream inImg = image.getInputStream()) {
             byte[] imgBytes = inImg.readAllBytes();
             ImageData imgData = ImageDataFactory.create(imgBytes);
             Image img = getImage(imgData, imageOp.getWidth(), imageOp.getHeight());
+
+            // 회전 적용 (deg -> rad)
+            if (imageOp.getRotationDeg() != 0f) {
+                img.setRotationAngle(Math.toRadians(imageOp.getRotationDeg()));
+            }
 
             img.setFixedPosition(imageOp.getPage(), imageOp.getX(), imageOp.getY());
             img.setOpacity(opacity);
@@ -397,33 +421,46 @@ public class PdfServiceImpl implements PdfService {
         }
     }
 
+    /** 사각형(Rect) */
     private void drawRect(PdfDocument pdfDoc, PdfEditRequest.RectOp rectOp) {
-        validatePage(pdfDoc, rectOp.page);
-        var pc = new PdfCanvas(pdfDoc.getPage(rectOp.page));
+        validatePage(pdfDoc, rectOp.getPage());
+        PdfCanvas pc = new PdfCanvas(pdfDoc.getPage(rectOp.getPage()));
         pc.saveState();
-        var opacity = Math.max(0f, Math.min(1f, rectOp.opacity));
-        var gs = new PdfExtGState().setFillOpacity(opacity).setStrokeOpacity(opacity);
+
+        float opacity = Math.max(0f, Math.min(1f, rectOp.getOpacity()));
+        PdfExtGState gs = new PdfExtGState().setFillOpacity(opacity).setStrokeOpacity(opacity);
         pc.setExtGState(gs);
-        if (rectOp.fillColor != null) pc.setFillColor(parseHexColor(rectOp.fillColor));
-        if (rectOp.strokeColor != null) pc.setStrokeColor(parseHexColor(rectOp.strokeColor));
-        if (rectOp.strokeWidth != null) pc.setLineWidth(rectOp.strokeWidth);
-        pc.rectangle(rectOp.x, rectOp.y, rectOp.w, rectOp.h);
-        if (rectOp.fillColor != null && rectOp.strokeColor != null) pc.fillStroke();
-        else if (rectOp.fillColor != null) pc.fill();
+
+        if (rectOp.getFillColor() != null) pc.setFillColor(parseHexColor(rectOp.getFillColor()));
+        if (rectOp.getStrokeColor() != null) pc.setStrokeColor(parseHexColor(rectOp.getStrokeColor()));
+        if (rectOp.getStrokeWidth() != null) pc.setLineWidth(rectOp.getStrokeWidth());
+
+        pc.rectangle(rectOp.getX(), rectOp.getY(), rectOp.getW(), rectOp.getH());
+
+        if (rectOp.getFillColor() != null && rectOp.getStrokeColor() != null) pc.fillStroke();
+        else if (rectOp.getFillColor() != null) pc.fill();
         else pc.stroke();
+
         pc.restoreState();
     }
 
+    /** 선(Line) */
     private void drawLine(PdfDocument pdfDoc, PdfEditRequest.LineOp lineOp) {
-        validatePage(pdfDoc, lineOp.page);
-        var pc = new PdfCanvas(pdfDoc.getPage(lineOp.page));
+        validatePage(pdfDoc, lineOp.getPage());
+        PdfCanvas pc = new PdfCanvas(pdfDoc.getPage(lineOp.getPage()));
         pc.saveState();
-        var opacity = Math.max(0f, Math.min(1f, lineOp.opacity));
-        var gs = new PdfExtGState().setStrokeOpacity(opacity);
+
+        float opacity = Math.max(0f, Math.min(1f, lineOp.getOpacity()));
+        PdfExtGState gs = new PdfExtGState().setStrokeOpacity(opacity);
         pc.setExtGState(gs);
-        if (lineOp.strokeColor != null) pc.setStrokeColor(parseHexColor(lineOp.strokeColor));
-        if (lineOp.strokeWidth != null) pc.setLineWidth(lineOp.strokeWidth);
-        pc.moveTo(lineOp.x1, lineOp.y1).lineTo(lineOp.x2, lineOp.y2).stroke();
+
+        if (lineOp.getStrokeColor() != null) pc.setStrokeColor(parseHexColor(lineOp.getStrokeColor()));
+        if (lineOp.getStrokeWidth() != null) pc.setLineWidth(lineOp.getStrokeWidth());
+
+        pc.moveTo(lineOp.getX1(), lineOp.getY1())
+                .lineTo(lineOp.getX2(), lineOp.getY2())
+                .stroke();
+
         pc.restoreState();
     }
 }

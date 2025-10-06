@@ -1,5 +1,6 @@
 package com.roa.forge.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.roa.forge.dto.PdfEditRequest;
 import com.roa.forge.dto.PdfImageInsertRequest;
 import com.roa.forge.dto.PdfResult;
@@ -21,6 +22,8 @@ import org.springframework.web.util.UriUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Validated
@@ -30,6 +33,7 @@ import java.util.Map;
 @Tag(name = "PDF", description = "PDF 편집/가공 API")
 public class PdfController {
     private final PdfService pdfService;
+    private final ObjectMapper objectMapper;
     private static final String NO_CACHE_HEADER = "no-store, no-cache, must-revalidate, max-age=0";
 
     private PdfResult setPdfResult(byte[] bytes, String filename) {
@@ -133,27 +137,56 @@ public class PdfController {
         return "attachment; filename=\"" + asciiFallback + "\"; filename*=UTF-8''" + encoded;
     }
 
+//    @PostMapping(
+//            value = "/edit",
+//            consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+//            produces = { MediaType.APPLICATION_PDF_VALUE, MediaType.APPLICATION_JSON_VALUE }
+//    )
+//    @ResponseWrapAdvice.NoWrap
+//    @Operation(summary = "배치 편집(다운로드)", description = "여러 작업을 한 번에 적용하고 PDF 바이너리로 반환")
+//    public ResponseEntity<byte[]> edit(
+//            @RequestPart("pdf") MultipartFile pdf,
+//            @RequestPart("req") @Valid PdfEditRequest req,
+//            @RequestPart(required = false) Map<String, MultipartFile> imageParts
+//    ) throws Exception {
+//        byte[] pdfBytes = pdfService.edit(pdf, req, imageParts == null ? Map.of() : imageParts);
+//        String filename = FilenamePolicy.build("edit", pdf.getOriginalFilename(), req.getOutputName());
+//
+//        return ResponseEntity.ok()
+//                .contentType(MediaType.APPLICATION_PDF)
+//                .contentLength(pdfBytes.length)
+//                .header(HttpHeaders.CONTENT_DISPOSITION, buildContentDisposition(filename))
+//                .header(HttpHeaders.CACHE_CONTROL, NO_CACHE_HEADER)
+//                .header("Pragma", "no-cache")
+//                .body(pdfBytes);
+//    }
+
+
     @PostMapping(
             value = "/edit",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
             produces = { MediaType.APPLICATION_PDF_VALUE, MediaType.APPLICATION_JSON_VALUE }
     )
     @ResponseWrapAdvice.NoWrap
-    @Operation(summary = "배치 편집(다운로드)", description = "여러 작업을 한 번에 적용하고 PDF 바이너리로 반환")
     public ResponseEntity<byte[]> edit(
             @RequestPart("pdf") MultipartFile pdf,
-            @Valid @ModelAttribute PdfEditRequest req,
-            @RequestPart(required = false) Map<String, MultipartFile> imageParts
+            @RequestPart(value = "assets", required = false) List<MultipartFile> assets,
+            @RequestPart("ops") String opsJson
     ) throws Exception {
-        byte[] pdfBytes = pdfService.edit(pdf, req, imageParts == null ? Map.of() : imageParts);
+        PdfEditRequest req = objectMapper.readValue(opsJson, PdfEditRequest.class);
+
+        Map<String, MultipartFile> imageParts = new HashMap<>();
+        if (assets != null) for (var f : assets) imageParts.put(f.getOriginalFilename(), f);
+
+        byte[] out = pdfService.edit(pdf, req, imageParts);
         String filename = FilenamePolicy.build("edit", pdf.getOriginalFilename(), req.getOutputName());
 
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
-                .contentLength(pdfBytes.length)
+                .contentLength(out.length)
                 .header(HttpHeaders.CONTENT_DISPOSITION, buildContentDisposition(filename))
                 .header(HttpHeaders.CACHE_CONTROL, NO_CACHE_HEADER)
                 .header("Pragma", "no-cache")
-                .body(pdfBytes);
+                .body(out);
     }
 }
